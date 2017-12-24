@@ -2103,7 +2103,7 @@ public class Scraper {
 				List<WebElement> rowsAsian = AHTable.findElements(By.xpath("//tbody/tr"));
 				float line = -1f, asianHome = -1f, asianAway = -1f;
 
-				controlRowsGoals(List<WebElement> rowsAsian, float line, asianHome, asianAway);
+				controlRowsGoals(List<WebElement> rowsAsian, line, asianHome, asianAway);
 				/**for (int r = rowsAsian.size() - 1; r >= 0; r--) {
 					WebElement row = rowsAsian.get(r);
 					if (row.getText().contains("Pinnacle")) {
