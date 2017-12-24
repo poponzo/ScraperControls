@@ -209,24 +209,6 @@ class ScaperControls {
 		return new ArrayList<String>();
 	}
 
-	private static boolean isFixtureLink(String attribute) {
-		// TODO Auto-generated method stub
-
-		// http://www.oddsportal.com/soccer/japan/j-league-2015/hiroshima-g-osaka-EufnwCdk/
-		String[] split = attribute.split("/");
-		String fixturePart = split[split.length - 1];
-		String[] split2 = fixturePart.split("-");
-		if (split2.length < 3)
-			return false;
-		else {
-			if (split2[split2.length - 1].length() == 8)
-				return true;
-			else
-				return false;
-		}
-
-	}
-
 	private static void control1of2ForOddsUpToDate(WebDriver driver, String competition,
 			ArrayList<String> links,  Date yesterday, boolean breakFlag, Set<ExtendedFixture> result) {
 		for (String i : links) {
@@ -399,7 +381,7 @@ class ScaperControls {
 			pinnIndex = customer.indexOf(row) + 1;
 	}
 
-	static void controlClick(tabs){
+	static void controlClick(WebElement tabs){
 		for (WebElement t : tabs) {
 			if (t.getText().contains("O/U")) {
 				t.click();
