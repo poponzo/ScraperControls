@@ -344,17 +344,16 @@ class ScaperControls {
 		}
 	}
 	
-	static void controlResElement(WebDriver driver, boolean liveMatchesFlag, Result fullResult, Result htResult){
-		WebElement resElement = driver.findElement(By.xpath("//*[@id='event-status']/p"));
-		if(resElement != null){
-			String resString = resElement.getText();
-		}
+	static void controlOneResElement(WebElement resElement, String resString, boolean liveMatchesFlag){
 		if (resElement != null && (resString.contains("penalties") || resString.contains("ET") || resString.contains("Postponed"))) {
 			return null;
 		}
 		if (resElement != null && ((!liveMatchesFlag && resString.contains("already started")) || resString.contains("Abandoned"))) {
 			return null;
 		}
+	}
+	
+	static void controlTwoResElement(WebElement resElement, String resString, Result fullResult, Result htResult){
 		if (resElement != null && (resString.contains("awarded") && resString.contains(home))) {
 			fullResult = new Result(3, 0);
 			htResult = new Result(3, 0);
@@ -363,17 +362,8 @@ class ScaperControls {
 			fullResult = new Result(0, 3);
 			htResult = new Result(0, 3);
 		}
-		if (resElement != null && (resString.contains("(") && resString.contains(")"))) {
-			String full = resString.split(" ")[2];
-			String half = resString.split(" ")[3].substring(1, 4);
-			fullResult = new Result(Integer.parseInt(full.split(":")[0]), Integer.parseInt(full.split(":")[1]));
-			htResult = new Result(Integer.parseInt(half.split(":")[0]), Integer.parseInt(half.split(":")[1]));
-		} else {
-			fullResult = new Result(-1, -1);
-			htResult = new Result(-1, -1);
-		}
 	}
-	
+
 	static void controlPinnIndex(WebElement row, List<WebElement> customer, int pinnIndex){
 		if (row.getText().contains("Pinnacle"))
 			pinnIndex = customer.indexOf(row) + 1;
@@ -454,4 +444,253 @@ class ScaperControls {
 			}
 		}
 	}
-}
+	
+	private static void controlWhileCollectFull(int fixtureCount, ArrayList<PlayerFixture> result) {
+		while (true) {
+			Document fixture = Jsoup.connect(BASE + linkM.attr("href")).timeout(30 * 1000).get();
+			ArrayList<PlayerFixture> ef = getFixtureFull(fixture, competition);
+			fixtureCount++;
+			result.addAll(ef);
+			break;
+			}
+	}
+	
+	static void controlForCollectFull(int fixtureCount, ArrayList<PlayerFixture> result,
+			Elements linksM) {
+		for (Element linkM : linksM && isScore(linkM.text())) {
+			int count = 0;
+			int maxTries = 10;
+			try {
+					controlWhileCollectFull(fixtureCount, result);
+				} catch (Exception e) {
+					if (++count == maxTries)
+						throw e;
+				}
+		}
+	}
+	
+	static void controlForGetFixture(Elements frames, int shotsHome, int shotsAway) {
+		Document stats = Jsoup.connect(BASE + i.attr("src")).timeout(0).get();
+		for (Element i : frames && i.attr("src").contains("/charts/statsplus")) {
+			shotsHome = Integer.parseInt(
+					stats.select("tr:contains(Shots on target)").get(1).select("td.legend.left.value").text());
+
+			shotsAway = Integer.parseInt(
+					stats.select("tr:contains(Shots on target)").get(1).select("td.legend.right.value").text());
+		}
+	}
+	
+	static void controlFirstForGetFixtureFull(Elements rowsH, ExtendedFixture fix, String Team) {
+		for (int i = 1; i < rowsH.size(); i++) {// without coach
+			Element row = rowsH.get(i);
+			if (row.text().contains("Coach") || row.text().contains("coach") || row.text().isEmpty())
+				continue;
+
+			Elements cols = row.select("td");
+			if (cols.size() < 2)
+				continue;
+			String name = "";
+			name = Utils.replaceNonAsciiWhitespace(cols.get(cols.size() == 2 ? 0 : 1).text());
+			PlayerFixture pf = new PlayerFixture(fix, Team, name, 90, true, false, 0, 0);
+			playerFixtures.add(pf);
+
+			}
+	}
+	
+	private static void controlForInFirstIf(ArrayList<PlayerFixture> playerFixtures, String outPlayer, int minute) {
+		for (PlayerFixture player : playerFixtures) {
+			if (player.name.equals(outPlayer)) {
+				player.minutesPlayed = minute;
+				break;
+			}
+		}
+	}
+	
+	private static void controlFirstIfInSecondForGetFixtureFull(String hATeam, ExtendedFixture fix, ArrayList<PlayerFixture> playerFixtures,
+			String name) {
+		if (name.contains(" for ")) {
+			String inPlayer = name.split(" for ")[0].trim();
+			String outPlayer = name.split(" for ")[1].split("[0-9]+'")[0].trim();
+			
+			int minute = 0;
+			String cleanMinutes = name.split(" ")[name.split(" ").length - 1].split("'")[0];
+			
+			if (cleanMinutes.contains("+"))
+				minute = Integer.parseInt(cleanMinutes.split("\\+")[0])
+						+ Integer.parseInt(cleanMinutes.split("\\+")[1]);
+			else
+				minute = Integer.parseInt(cleanMinutes);
+			
+			PlayerFixture pf = new PlayerFixture(fix, homeTeam, inPlayer, 90 - minute, false, true, 0, 0);
+			playerFixtures.add(pf);
+
+			controlForInFirstIf(playerFixtures, outPlayer, minute);
+
+			if (verbose)
+				System.out.println(inPlayer + " for " + outPlayer + " in " + minute);
+
+		} else {
+			PlayerFixture pf = new PlayerFixture(fix, hATeam, name, 0, false, false, 0, 0);
+			playerFixtures.add(pf);
+			if (verbose)
+				System.out.println(shirtNumber + " " + name);
+		}
+	}
+	
+	static void controlSecondForGetFixtureFull(Elements rowsHA, String hATeam, ExtendedFixture fix,
+			ArrayList<PlayerFixture> playerFixtures, String homeTeam) {
+		for (int i = 1; i < rowsHA.size(); i++) {
+			Element row = rowsHA.get(i);
+			Elements cols = row.select("td");
+			String shirtNumber = cols.get(0).text();
+			String name = Utils.replaceNonAsciiWhitespace(cols.get(cols.size() == 2 ? 0 : 1).text());
+
+			controlFirstIfInSecondForGetFixtureFull(hATeam, fix, playerFixtures, name);
+		}
+	}
+	
+	static void controlHomeGoal(ArrayList<PlayerFixture> playerFixtures, String[] splitByMinute) {
+		String goalScorer = splitByMinute[0].trim();
+		goalScorer = Utils.replaceNonAsciiWhitespace(goalScorer).trim();
+		if (goalScorer.contains("(PG)")) {
+			goalScorer = goalScorer.replace("(PG)", "").trim();
+		}
+
+		if (!goalScorer.contains("(OG)"))
+			updatePlayer(goalScorer, playerFixtures, true);
+
+		if (splitByMinute.length > 1) {
+			// Extra info like assistedS by, PG or OG
+			String extraString = splitByMinute[1];
+
+			if (extraString.contains("assist by")) {
+				String assister = splitByMinute[1].split("\\(assist by ")[1].trim();
+				assister = Utils.replaceNonAsciiWhitespace(assister);
+				assister = assister.substring(0, assister.length() - 1).trim();
+				updatePlayer(assister, playerFixtures, false);
+			}
+		}
+	}
+	
+	/**
+	 * Updates the goals or assists (by 1) of the player in the playerFixtures
+	 * collection
+	 * 
+	 * @param name
+	 * @param playerFixtures
+	 * @param goals
+	 *            true if updating goals, false if updating assists
+	 */
+
+	private static void updatePlayer(String name, ArrayList<PlayerFixture> playerFixtures, boolean goals) {
+		boolean updated = false;
+		for (PlayerFixture player : playerFixtures) {
+			if (player.name.equals(name)) {
+				if (goals)
+					player.goals++;
+				else
+					player.assists++;
+				updated = true;
+				break;
+			}
+		}
+		// Utils.printPlayers(playerFixtures);
+
+		if (!updated)
+			System.err.println("Problem in updating " + (goals ? "goals " : "assists ") + "for " + name);
+
+	}
+	
+	private static void control2IfAwayGoal(ArrayList<PlayerFixture> playerFixtures, String[] splitByMinute) {
+		String goalScorer = splitByMinute[1].replace("(PG)", "").trim();
+		if (goalScorer.contains("+"))
+			goalScorer = goalScorer.replace("+", "").replaceAll("\\d", "").trim();
+
+		goalScorer = Utils.replaceNonAsciiWhitespace(goalScorer).trim();
+
+		if (goalScorer.contains("assist by")) {
+			String assister = goalScorer.split("\\(assist by ")[1].trim();
+			assister = Utils.replaceNonAsciiWhitespace(assister);
+			assister = assister.substring(0, assister.length() - 1);
+			updatePlayer(assister, playerFixtures, false);
+			goalScorer = goalScorer.split("\\(assist by ")[0].trim();
+		}
+		updatePlayer(goalScorer, playerFixtures, true);
+	}
+	
+	static void controlAwayGoal(ArrayList<PlayerFixture> playerFixtures, String[] splitByMinute) {
+	
+		if (splitByMinute[1].contains("(PG)")) {
+			control2IfAwayGoal(playerFixtures, splitByMinute);
+		} 
+		if (splitByMinute[1].contains("assist by")) {
+			String goalScorer = splitByMinute[1].split("\\(assist by ")[0].trim();
+			goalScorer = Utils.replaceNonAsciiWhitespace(goalScorer).trim();
+			if (goalScorer.contains("+"))// scored in
+				goalScorer = goalScorer.replace("+", "").replaceAll("\\d", "").trim();
+	
+			updatePlayer(goalScorer, playerFixtures, true);
+	
+			String assister = splitByMinute[1].split("\\(assist by ")[1].trim();
+			assister = Utils.replaceNonAsciiWhitespace(assister);
+			assister = assister.substring(0, assister.length() - 1).trim();
+			updatePlayer(assister, playerFixtures, false);
+		} 
+		if (!splitByMinute[1].contains("(OG)")) { // Solo goal no assists, no PG,no OG
+			String goalScorer = Utils.replaceNonAsciiWhitespace(splitByMinute[1].trim()).trim();
+			if (goalScorer.contains("+"))
+				goalScorer = goalScorer.replace("+", "").replaceAll("\\d", "").trim();
+			
+			updatePlayer(goalScorer, playerFixtures, true);
+		}
+	}
+	
+	static void controlFirstForOdds(List<WebElement> list, ArrayList<String> links) {
+		for (WebElement i : list) {
+			String href = i.getAttribute("href");
+			if (i.getText().contains("-") && isFixtureLink(href)) {
+				links.add(href);
+	
+			}
+		}
+	}
+	
+	static void controlSecondForOdds(ArrayList<String> links, Set<ExtendedFixture> result) {
+		for (String i : links) {
+			ExtendedFixture ef = getOddsFixture(driver, i, competition, false, OnlyTodayMatches.FALSE);
+			if (ef != null)
+				result.add(ef);
+		}
+	}
+	
+	static void controlFirstForFullOdds(List<WebElement> el, ArrayList<String> links) {
+		for (WebElement i : el) {
+			String href = i.getAttribute("href");
+			if (i.getText().contains("-") && isFixtureLink(href))
+				links.add(href);
+		}
+	}
+	
+	static void controlSecondForFullOdds(ArrayList<String> links, Set<FullFixture> result) {
+		for (String i : links) {
+			FullFixture ef = getFullFixtureTest(driver, i, competition);
+			if (ef != null)
+				result.add(ef);
+		}
+	}
+	
+	static void controlFirstForOddsByPage(List<WebElement> list, ArrayList<String> links) {
+		for (WebElement i : list) {
+			if (i.getText().contains("-") && isFixtureLink(i.getAttribute("href")))
+				links.add(i.getAttribute("href"));
+		}
+	}
+	
+	static void controlSecondForOddsByPage(ArrayList<String> links, Set<FullFixture> result) {
+		for (WebElement i : list) {
+			if (i.getText().contains("-") && isFixtureLink(i.getAttribute("href")))
+				links.add(i.getAttribute("href"));
+		}
+	}
+	
+}//di classe
